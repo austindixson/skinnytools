@@ -1,0 +1,86 @@
+{
+  "schema": "openclaw.skill.v1",
+  "name": "skinnytools-filter",
+  "version": "0.1.0",
+  "displayName": "SkinnyTools Context Filter | OpenClaw Skill",
+  "description": "Compresses tool results before they enter the agent's context window. Strips recursive session JSON, compacts bloated API responses, truncates logs, removes base64 blobs, and prevents the recursive amplification problem that causes context overflow (1.5M+ token prompts). Use this skill whenever tool results are large, when sessions are dying from context overload, when exec/shell tools return session dumps, or when you need to reduce token costs. Essential for long-running agent loops and multi-tool workflows.",
+  "author": "RuneweaverStudios",
+  "tags": [
+    "openclaw",
+    "context-window",
+    "token-optimization",
+    "tool-results",
+    "compression",
+    "recursive-detection",
+    "session-management",
+    "cost-reduction",
+    "agent-loop",
+    "dietmcp"
+  ],
+  "platform": "openclaw",
+  "nativeSkills": "auto",
+  "autoActivate": true,
+  "hooks": {
+    "postToolResult": {
+      "description": "Automatically filter every tool result before it enters context",
+      "script": "scripts/filter.py",
+      "trigger": "always",
+      "maxInputSize": 1024
+    }
+  },
+  "dependencies": {
+    "python": ">=3.11",
+    "packages": ["click>=8.1", "pydantic>=2.0"]
+  },
+  "tools": [
+    {
+      "name": "skinnytools_filter",
+      "description": "Filter tool output through the skinnytools compression pipeline. Strips recursive session blobs, compacts JSON, truncates oversized results.",
+      "parameters": {
+        "content": {
+          "type": "string",
+          "description": "The raw tool output to filter",
+          "required": true
+        },
+        "max_size": {
+          "type": "integer",
+          "description": "Maximum output size in characters (default: 50000)",
+          "required": false
+        },
+        "disable": {
+          "type": "string",
+          "description": "Comma-separated filter names to disable: recursive,content_aware,json_compactor,truncator,file_redirect",
+          "required": false
+        }
+      }
+    },
+    {
+      "name": "skinnytools_analyze",
+      "description": "Analyze a session file or JSONL log for context bloat sources. Reports size distribution, recursive content, and compression potential.",
+      "parameters": {
+        "file_path": {
+          "type": "string",
+          "description": "Path to the session file to analyze",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "skinnytools_wrap",
+      "description": "Execute a command and filter its output through skinnytools before returning.",
+      "parameters": {
+        "command": {
+          "type": "string",
+          "description": "The shell command to execute and filter",
+          "required": true
+        },
+        "max_size": {
+          "type": "integer",
+          "description": "Maximum output size in characters (default: 50000)",
+          "required": false
+        }
+      }
+    }
+  ],
+  "repository": "https://github.com/RuneweaverStudios/skinnytools"
+}
