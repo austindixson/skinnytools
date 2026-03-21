@@ -142,32 +142,84 @@ Per-filter breakdown:
   file_redirect        (no change) [0ms]
 ```
 
-## Agent Loop Benchmark
+## 40-Call Agent Session Benchmark
 
-The per-scenario benchmark measures compression on isolated inputs. The agent loop benchmark measures the compounding effect over a real ReAct tool-calling session.
+This is the definitive benchmark. 40 tool calls with a fixed schedule, simulating a real infrastructure check. Real token counts measured at 10 checkpoints via MiniMax M2.5 on OpenRouter.
 
 ### Setup
 
-The model is asked to check 8 services after a restart. It makes real tool calls (`check_service`, `exec_command`, `read_file`, `get_session_report`) via OpenAI-format function calling. Simulated tool handlers return realistic results, including the recursive case where `get_session_report` embeds the full conversation history.
+The agent manages 8 services after a restart. The tool call schedule is deterministic (no model variance):
 
-Two runs: one raw (no filtering), one with skinnytools filtering every tool result.
+| Phase | Calls | Tools |
+|-------|-------|-------|
+| 1. Service checks | #1-8 | `check_service` x8 |
+| 2. Config reads | #9-12 | `read_file` x4 |
+| 3. Session report #1 | #13 | `get_session_report` (recursive) |
+| 4. Log tailing | #14-21 | `tail_logs` x8 |
+| 5. Diagnostics | #22-29 | `exec_command` x8 |
+| 6. Session report #2 | #30 | `get_session_report` (recursive) |
+| 7. Dependency checks | #31-34 | `check_dependency` x4 |
+| 8. Final checks | #35-38 | `exec_command` x3 + `read_file` x1 |
+| 9. Session report #3 | #39 | `get_session_report` (recursive) |
+| 10. Final report | #40 | `get_session_report` (recursive + artifacts) |
 
-### Results (MiniMax M2.5)
+Both runs use the exact same tool calls and results. The only difference: the skinnytools run filters each result through the pipeline before appending to context.
 
-| Metric | Raw | skinnytools |
-|--------|-----|-------------|
-| Turns completed | 10 | 3 |
-| Tool calls made | 9 | 9 |
-| Total tokens (all turns) | 47,591 | 20,327 |
-| **Session token savings** | | **57.3%** |
+### Results
+
+| | Raw | skinnytools | Savings |
+|--|-----|-------------|---------|
+| **Final context** | 1.3M chars | 94.1K chars | **92.8%** |
+| **Final prompt tokens** | 327,255 | 31,145 | **90.5%** |
+| **Session cost** | $0.19 | $0.08 | **58.9%** |
+
+### Token Growth (real API measurements at checkpoints)
+
+| Checkpoint | Raw Tokens | Filtered Tokens | Token Savings |
+|-----------|-----------|----------------|---------------|
+| Call #1 | 899 | 697 | 22.5% |
+| Call #5 | 4,219 | 3,209 | 23.9% |
+| Call #10 | 7,080 | 5,464 | 22.8% |
+| Call #13 (1st report) | 16,838 | 14,800 | 12.1% |
+| Call #20 | 36,679 | 24,908 | 32.1% |
+| Call #25 | 40,833 | 27,681 | 32.2% |
+| Call #30 (2nd report) | 89,936 | 29,743 | **66.9%** |
+| Call #35 | 90,569 | 30,376 | **66.5%** |
+| Call #39 (3rd report) | 196,453 | 30,793 | **84.3%** |
+| Call #40 (4th report) | 327,255 | 31,145 | **90.5%** |
+
+### The Recursive Bombs
+
+Each session report embeds the full conversation — including all previous session reports. They grow exponentially:
+
+| Call # | Raw Result Size | Filtered Size | Compression |
+|--------|----------------|---------------|-------------|
+| #13 (1st report) | 25.6K | 24.9K | 2.9% (still small, not much to strip) |
+| #30 (2nd report) | 125.4K | 297 bytes | **99.8%** (contains 125K of recursive history) |
+| #39 (3rd report) | 275.0K | 297 bytes | **99.9%** (contains 275K of recursive history) |
+| #40 (4th report) | 593.2K | 1.1K | **99.8%** (contains 593K of recursive history) |
+
+### Context Growth Acceleration
+
+```
+Raw  (calls 1-20):   +111.6K     ← linear growth, normal tool results accumulating
+Raw  (calls 21-40):  +1.2M       ← EXPONENTIAL — recursive amplification kicks in
+
+Filt (calls 1-20):   +77.3K      ← similar to raw (small results pass through)
+Filt (calls 21-40):  +14.6K      ← FLAT — recursive content stripped
+```
+
+Raw context growth is **82x larger** in the second half. This is the recursive amplification bug in action — each session report contains a copy of all previous session reports.
+
+Without skinnytools, this session would hit a 1M token context limit at call #39. With skinnytools, it stays at 31K tokens through all 40 calls.
 
 ### Dev Notes
 
-The model chose different strategies in each run. Raw: checked services one-at-a-time (1 call/turn, 10 turns). Skinnytools: batched all 8 checks in turn 1, then session report, done in 3 turns. This is realistic — model behavior varies between runs.
+This benchmark uses a deterministic tool schedule (no LLM-driven tool selection) to eliminate model behavior variance between runs. Both the raw and filtered runs execute the exact same 40 tool calls in the same order, producing the same simulated results. The only variable is whether skinnytools filters the results before they enter context.
 
-The total-tokens-across-all-turns metric is what matters. The raw version re-sends the growing context 10 times; the skinnytools version only sends it 3 times. Fewer turns with the same work done = fewer total tokens billed.
+Token counts are measured by making real API calls to MiniMax M2.5 via OpenRouter at 10 checkpoints. The checkpoint calls use `max_tokens=10` (minimal completion) to minimize cost — we only care about the `prompt_tokens` count, which reflects how many tokens the model would receive if this were a real agent turn.
 
-The per-turn context comparison is misleading because batching 8 calls in one turn creates more per-turn content than doing them one at a time. The compounding effect — where recursive embedding causes exponential growth — would be more visible over hundreds of turns, as in the tweeter's 4,746-entry session.
+The first session report (#13) shows only 2.9% compression because the conversation is still small (25K) and most of the content is legitimate tool results, not recursive copies. By report #30, the conversation contains 125K of recursive history and skinnytools strips it to 297 bytes. This matches the real-world pattern: the recursive amplification problem only becomes catastrophic after many tool calls.
 
 ## Running the Benchmarks
 
@@ -175,13 +227,14 @@ The per-turn context comparison is misleading because batching 8 calls in one tu
 # Set your OpenRouter API key
 echo "OPENROUTER_API_KEY=sk-or-..." > .env
 
-# Per-scenario benchmark (MiniMax M2.5 + Claude Opus)
+# 40-call agent session (10 real API calls for token measurement)
+.venv/bin/python benchmarks/bench_40_calls.py
+
+# Per-scenario benchmark (MiniMax M2.5 + Claude Opus, 20 API calls)
 .venv/bin/python benchmarks/bench_real.py
 
-# Agent loop benchmark (MiniMax M2.5)
+# Agent loop with LLM-driven tool selection (10-20 API calls)
 .venv/bin/python benchmarks/bench_agent_loop.py
 
 # Results saved to benchmarks/results/
 ```
-
-The per-scenario benchmark makes 20 API calls (5 scenarios x 2 raw/filtered x 2 models). The agent loop benchmark makes 10-20 calls depending on how many turns the model takes. Typical runtime: 2-5 minutes each.

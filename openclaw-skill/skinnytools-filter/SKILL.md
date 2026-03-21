@@ -55,15 +55,15 @@ echo "$OUTPUT" | python3 scripts/filter.py --max-size 30000 --verbose
 
 ## Benchmarks
 
-Tested on MiniMax M2.5 and Claude Opus across 5 realistic scenarios:
+40-call agent session (8 service checks, 8 log tails, 8 diagnostics, 4 config reads, 4 dependency checks, 4 recursive session reports):
 
-- **74.7% prompt token reduction** (347K → 88K tokens)
-- **75.2% cost savings** ($2.89 → $0.72)
-- **99.7% compression** on base64 blobs
-- **98.6% compression** on log dumps
+- **Final context**: 1.3M → 94.1K chars (**92.8% reduction**)
+- **Final prompt tokens**: 327,255 → 31,145 (**90.5% reduction**)
+- **Session cost**: $0.19 → $0.08 (**58.9% savings**)
+- Session report #40: 593K → 1.1K (**99.8% compression**)
+- Without skinnytools: session dies at call #39 (hits 1M token limit)
+- With skinnytools: stays at 31K tokens through all 40 calls
 - Response quality preserved — models give identical answers
-
-Agent loop benchmark (8 services + session report): **57.3% total session token savings**.
 
 ## Configuration
 

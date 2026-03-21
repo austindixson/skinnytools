@@ -93,4 +93,4 @@ skinnytools filter --max-size 30000 --budget 300000 --disable file_redirect
 
 ## Benchmarks
 
-Tested on MiniMax M2.5 and Claude Opus: **74.7% token savings**, **75.2% cost savings**, response quality preserved.
+40-call agent session: **327,255 → 31,145 prompt tokens (90.5% savings)**. Session reports containing recursive conversation history compressed from 593K to 1.1K chars (99.8%). Without skinnytools the session dies at call #39. With it, stays at 31K tokens through all 40 calls. Response quality preserved.

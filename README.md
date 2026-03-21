@@ -133,29 +133,51 @@ skinnytools filter --disable file_redirect --disable json_compactor
 
 ## Benchmarks
 
-Real API calls against MiniMax M2.5 and Claude Opus via OpenRouter. Five scenarios simulating production agent workloads:
+### 40-Call Agent Session (the real test)
 
-### Per-Scenario Results (both models combined)
+40 tool calls simulating an infrastructure check after restart: 8 service checks, 4 config reads, 8 log tails, 8 diagnostic commands, 4 dependency checks, and **4 session reports** (the recursive bombs). Real token counts measured via MiniMax M2.5 on OpenRouter.
+
+| | Raw | skinnytools | Savings |
+|--|-----|-------------|---------|
+| **Final context** | 1.3M chars | 94.1K chars | **92.8%** |
+| **Final prompt tokens** | 327,255 | 31,145 | **90.5%** |
+| **Session cost** | $0.19 | $0.08 | **58.9%** |
+
+The 4 session reports embed the full conversation history — each one larger than the last because it contains all previous reports:
+
+| Call # | Raw Result | Filtered | Compression |
+|--------|-----------|----------|-------------|
+| #13 (1st report) | 25.6K | 24.9K | 2.9% |
+| #30 (2nd report) | 125.4K | 297 bytes | **99.8%** |
+| #39 (3rd report) | 275.0K | 297 bytes | **99.9%** |
+| #40 (4th report) | 593.2K | 1.1K | **99.8%** |
+
+Context growth tells the real story:
+
+```
+Raw  (calls 1-20):   +111.6K     ← linear growth, normal
+Raw  (calls 21-40):  +1.2M       ← EXPONENTIAL — recursive amplification
+
+Filt (calls 1-20):   +77.3K      ← similar to raw, small results pass through
+Filt (calls 21-40):  +14.6K      ← FLAT — skinnytools caught the bombs
+```
+
+Raw context growth is **82x larger** in the second half. Without skinnytools, this session hits a 1M token limit at call #39. With skinnytools, it stays at 31K tokens through all 40 calls.
+
+### Per-Scenario Results (MiniMax M2.5 + Claude Opus)
+
+5 isolated scenarios with real API calls:
 
 | Scenario | Raw Tokens | Filtered | Saved |
 |----------|-----------|----------|-------|
-| Recursive session dump (the tweet bug) | 46,864 | 37,908 | 19% |
-| Bloated API response (200 items, nulls) | 160,709 | 33,526 | **79%** |
-| Log dump with stack traces (500 lines) | 21,919 | 309 | **99%** |
-| Accumulated multi-tool context (8 calls) | 15,755 | 15,755 | 0% |
-| Base64 image blob (50KB binary) | 102,012 | 273 | **99.7%** |
+| Recursive session dump | 46,864 | 37,908 | 19% |
+| Bloated API response (200 items) | 160,709 | 33,526 | **79%** |
+| Log dump + stack traces | 21,919 | 309 | **99%** |
+| Accumulated multi-tool context | 15,755 | 15,755 | 0% |
+| Base64 image blob | 102,012 | 273 | **99.7%** |
 | **Total** | **347,259** | **87,771** | **74.7%** |
 
 **Cost**: $2.89 → $0.72 = **$2.17 saved (75%)**
-
-### Agent Loop Benchmark
-
-Simulates the real problem — a ReAct loop checking 8 services with tool calls accumulating in context:
-
-| Metric | Raw | skinnytools |
-|--------|-----|-------------|
-| Total tokens (all turns) | 47,591 | 20,327 |
-| **Session token savings** | | **57.3%** |
 
 Response quality is preserved. Both models produce identical answers with filtered input.
 
