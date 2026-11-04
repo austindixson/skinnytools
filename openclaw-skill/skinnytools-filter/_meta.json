@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "displayName": "SkinnyTools Context Filter | OpenClaw Skill",
   "description": "Compresses tool results before they enter the agent's context window. Strips recursive session JSON, compacts bloated API responses, truncates logs, removes base64 blobs, and prevents the recursive amplification problem that causes context overflow (1.5M+ token prompts). Use this skill whenever tool results are large, when sessions are dying from context overload, when exec/shell tools return session dumps, or when you need to reduce token costs. Essential for long-running agent loops and multi-tool workflows.",
-  "author": "RuneweaverStudios",
+  "author": "austindixson",
   "tags": [
     "openclaw",
     "context-window",
@@ -82,5 +82,5 @@
       }
     }
   ],
-  "repository": "https://github.com/RuneweaverStudios/skinnytools"
+  "repository": "https://github.com/austindixson/skinnytools"
 }

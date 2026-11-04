@@ -79,7 +79,7 @@ pip install skinnytools
 
 Or from source:
 ```bash
-git clone https://github.com/RuneweaverStudios/skinnytools.git
+git clone https://github.com/austindixson/skinnytools.git
 cd skinnytools && pip install -e .
 ```
 

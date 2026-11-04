@@ -6,7 +6,7 @@ Drop-in tool result compression for OpenClaw agents. Install it and forget about
 
 ```bash
 # One command. Done.
-git clone https://github.com/RuneweaverStudios/skinnytools.git /tmp/skinnytools \
+git clone https://github.com/austindixson/skinnytools.git /tmp/skinnytools \
   && cp -r /tmp/skinnytools/openclaw-skill/skinnytools-filter ~/.openclaw/workspace/skills/ \
   && cd ~/.openclaw/workspace/skills/skinnytools-filter && ./scripts/install.sh
 ```
